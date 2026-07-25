@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Volunteer Data Collection</title>
+<style>
+  body{font-family:Arial,sans-serif;max-width:480px;margin:20px auto;padding:0 16px;color:#222;}
+  h2{color:#8e63ce;margin-bottom:4px;}
+  .info{background:#f4f4f4;padding:10px;border-radius:6px;margin-bottom:14px;font-size:14px;}
+  label{display:block;margin-top:14px;font-weight:bold;font-size:14px;}
+  input[type=text],select,input[type=date]{width:100%;padding:10px;margin-top:4px;box-sizing:border-box;font-size:16px;}
+  input[type=file]{margin-top:6px;width:100%;}
+  .radio-group{margin-top:6px;}
+  .radio-group label{display:inline-block;font-weight:normal;margin:0 16px 6px 0;font-size:15px;}
+  .radio-group input{margin-right:6px;}
+  .subfield{margin-left:0;padding-left:12px;border-left:3px solid #e0d3f5;}
+  .guidelines{font-size:12px;color:#555;margin:6px 0 0 0;padding-left:18px;}
+  button{margin-top:22px;padding:12px 18px;width:100%;background:#8e63ce;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:16px;}
+  button:disabled{background:#bbb;}
+  #status{margin-top:14px;font-weight:bold;text-align:center;}
+  #loading{padding:40px 0;text-align:center;color:#666;}
+</style>
+</head>
+<body>
+
+<div id="loading">Loading volunteer details…</div>
+<div id="app" style="display:none;">
+  <h2>Data Collection</h2>
+  <div class="info">
+    <div><b>YA ID:</b> <span id="infoYaId"></span></div>
+    <div><b>Name:</b> <span id="infoName"></span></div>
+    <div><b>Sewa Center:</b> <span id="infoCenter"></span></div>
+  </div>
+  <form id="collectForm"></form>
+  <div id="status"></div>
+</div>
+
+<script>
+// =====================================================================
+// CONFIGURE THIS: paste your Apps Script Web App URL below (the same one
+// used for "Save My Web App URL" in the spreadsheet's I-Card Tools menu).
+// =====================================================================
+var WEBAPP_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+function getYaId() {
+  var params = new URLSearchParams(window.location.search);
+  return params.get('yaid') || '';
+}
+
+function el(tag, attrs, children) {
+  var e = document.createElement(tag);
+  if (attrs) Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+  (children || []).forEach(function (c) { e.appendChild(c); });
+  return e;
+}
+function textNode(s) { return document.createTextNode(s); }
+
+function readFieldValue(input) {
+  if (input.tagName === 'DIV') {
+    var checked = input.querySelector('input[type=radio]:checked');
+    return checked ? checked.value : '';
+  }
+  return input.value;
+}
+
+function renderFieldBlock(form, field) {
+  var label = el('label', {}, [textNode(field.label)]);
+  form.appendChild(label);
+
+  if (field.type === 'date') {
+    form.appendChild(el('input', { type: 'date', 'data-field': field.label }));
+    return;
+  }
+
+  if (field.type === 'dropdown') {
+    var select = el('select', { 'data-field': field.label });
+    select.appendChild(el('option', { value: '' }, [textNode('-- Select --')]));
+    field.options.forEach(function (o) { select.appendChild(el('option', {}, [textNode(o)])); });
+    form.appendChild(select);
+
+    if (field.hierarchy) {
+      var gradBlock = el('div', { class: 'subfield', id: 'hqGradBlock', style: 'display:none;' }, [
+        el('label', {}, [textNode('Graduation (degree name, e.g. B.A., B.Sc.)')]),
+        el('input', { type: 'text', 'data-field': 'Graduation Degree' })
+      ]);
+      var pgBlock = el('div', { class: 'subfield', id: 'hqPgBlock', style: 'display:none;' }, [
+        el('label', {}, [textNode('Post Graduation (degree name, e.g. M.A., MBA)')]),
+        el('input', { type: 'text', 'data-field': 'Post Graduation Degree' })
+      ]);
+      var profBlock = el('div', { class: 'subfield', id: 'hqProfBlock', style: 'display:none;' }, [
+        el('label', {}, [textNode('Professional Course (please specify)')]),
+        el('input', { type: 'text', 'data-field': 'Professional Course Detail' })
+      ]);
+      form.appendChild(gradBlock); form.appendChild(pgBlock); form.appendChild(profBlock);
+      select.addEventListener('change', function () {
+        var v = this.value;
+        gradBlock.style.display = (v === 'Pursuing Graduation' || v === 'Graduate') ? 'block' : 'none';
+        pgBlock.style.display = (v === 'Pursuing Post Graduation' || v === 'Post Graduate') ? 'block' : 'none';
+        profBlock.style.display = (v === 'Professional Course') ? 'block' : 'none';
+      });
+    }
+    if (field.otherOption) {
+      var otherBlock = el('div', { class: 'subfield', id: 'otherBlock_' + field.label.replace(/[^a-zA-Z0-9]/g, ''), style: 'display:none;' }, [
+        el('label', {}, [textNode('Please specify')]),
+        el('input', { type: 'text', 'data-field': field.label + ' Other' })
+      ]);
+      form.appendChild(otherBlock);
+      select.addEventListener('change', function () {
+        otherBlock.style.display = (this.value === field.otherOption) ? 'block' : 'none';
+      });
+    }
+    return;
+  }
+
+  if (field.type === 'radio') {
+    var group = el('div', { class: 'radio-group', 'data-field': field.label });
+    field.options.forEach(function (o, i) {
+      var id = 'radio_' + field.label.replace(/[^a-zA-Z0-9]/g, '') + '_' + i;
+      var input = el('input', { type: 'radio', id: id, name: 'radio_' + field.label.replace(/[^a-zA-Z0-9]/g, ''), value: o });
+      var lbl = el('label', { for: id }, [input, textNode(' ' + o)]);
+      group.appendChild(lbl);
+    });
+    form.appendChild(group);
+    return;
+  }
+
+  form.appendChild(el('input', { type: 'text', 'data-field': field.label }));
+}
+
+function renderPhotoBlock(form, guidelines) {
+  form.appendChild(el('label', {}, [textNode('Photo')]));
+  var ul = el('ul', { class: 'guidelines' });
+  guidelines.forEach(function (g) { ul.appendChild(el('li', {}, [textNode(g)])); });
+  form.appendChild(ul);
+  form.appendChild(el('input', { type: 'file', id: 'photoFile', accept: 'image/*' }));
+}
+
+function renderIdProofBlock(form, idProofTypes) {
+  form.appendChild(el('label', {}, [textNode('ID Proof Type')]));
+  var select = el('select', { id: 'idProofType' });
+  select.appendChild(el('option', { value: '' }, [textNode('-- Select --')]));
+  idProofTypes.forEach(function (t) { select.appendChild(el('option', {}, [textNode(t)])); });
+  form.appendChild(select);
+
+  form.appendChild(el('label', {}, [textNode('ID Proof - Front')]));
+  form.appendChild(el('input', { type: 'file', id: 'idProofFrontFile' }));
+  form.appendChild(el('label', {}, [textNode('ID Proof - Back')]));
+  form.appendChild(el('input', { type: 'file', id: 'idProofBackFile' }));
+}
+
+function compressImage(file, maxDim, quality) {
+  return new Promise(function (resolve) {
+    try {
+      var img = new Image();
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        img.onload = function () {
+          try {
+            var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+            if (!w || !h) { resolve(file); return; }
+            if (w <= maxDim && h <= maxDim) { resolve(file); return; }
+            if (w > h) { h = Math.max(1, Math.round(h * (maxDim / w))); w = maxDim; }
+            else { w = Math.max(1, Math.round(w * (maxDim / h))); h = maxDim; }
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob(function (blob) { resolve(blob || file); }, 'image/jpeg', quality);
+          } catch (err) { resolve(file); }
+        };
+        img.onerror = function () { resolve(file); };
+        img.src = e.target.result;
+      };
+      reader.onerror = function () { resolve(file); };
+      reader.readAsDataURL(file);
+    } catch (err) { resolve(file); }
+  });
+}
+
+function blobToDataObj(blobOrFile) {
+  return new Promise(function (resolve, reject) {
+    if (!blobOrFile) { resolve(null); return; }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var result = e.target.result;
+      var commaIdx = result.indexOf(',');
+      var base64 = result.substring(commaIdx + 1);
+      var mimeType = (result.substring(5, commaIdx).split(';')[0]) || blobOrFile.type || 'image/jpeg';
+      resolve({ data: base64, mimeType: mimeType, name: blobOrFile.name || 'upload.jpg' });
+    };
+    reader.onerror = function () { reject(new Error('Could not encode file')); };
+    reader.readAsDataURL(blobOrFile);
+  });
+}
+
+// Sent as text/plain to avoid a CORS preflight OPTIONS request, which Apps
+// Script Web Apps don't handle — the server still JSON.parses the body.
+function callBackend(payload) {
+  return fetch(WEBAPP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload)
+  }).then(function (r) { return r.json(); }).then(function (r) {
+    if (!r.ok) throw new Error(r.error || 'Server error');
+    return r;
+  });
+}
+
+function init() {
+  var yaId = getYaId();
+  var statusEl = document.getElementById('status');
+  if (!yaId) {
+    document.getElementById('loading').textContent = 'Missing YA ID in the link.';
+    return;
+  }
+
+  fetch(WEBAPP_URL + '?yaid=' + encodeURIComponent(yaId) + '&format=json')
+    .then(function (r) { return r.json(); })
+    .then(function (info) {
+      document.getElementById('loading').style.display = 'none';
+      if (!info.ok) {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('loading').textContent = info.error || 'Volunteer not found.';
+        return;
+      }
+      if (info.nothingMissing) {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('loading').textContent = 'Nothing currently marked as missing for ' + (info.name || yaId) + '.';
+        return;
+      }
+
+      document.getElementById('app').style.display = 'block';
+      document.getElementById('infoYaId').textContent = yaId;
+      document.getElementById('infoName').textContent = info.name;
+      document.getElementById('infoCenter').textContent = info.center;
+
+      var form = document.getElementById('collectForm');
+      info.fields.forEach(function (field) { renderFieldBlock(form, field); });
+      if (info.needsPhoto) renderPhotoBlock(form, info.photoGuidelines);
+      if (info.needsIdProof) renderIdProofBlock(form, info.idProofTypes);
+
+      var btn = el('button', { type: 'submit', id: 'submitBtn' }, [textNode('Submit')]);
+      form.appendChild(btn);
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        btn.disabled = true;
+        statusEl.textContent = '';
+
+        var fieldValues = {};
+        form.querySelectorAll('[data-field]').forEach(function (input) {
+          fieldValues[input.getAttribute('data-field')] = readFieldValue(input);
+        });
+
+        var photoEl = document.getElementById('photoFile');
+        var photoRaw = photoEl && photoEl.files.length ? photoEl.files[0] : null;
+        var idProofTypeEl = document.getElementById('idProofType');
+        var idProofType = idProofTypeEl ? idProofTypeEl.value : '';
+        var idProofFrontEl = document.getElementById('idProofFrontFile');
+        var idProofFrontRaw = idProofFrontEl && idProofFrontEl.files.length ? idProofFrontEl.files[0] : null;
+        var idProofBackEl = document.getElementById('idProofBackFile');
+        var idProofBackRaw = idProofBackEl && idProofBackEl.files.length ? idProofBackEl.files[0] : null;
+
+        var totalSteps = 1 + (photoRaw ? 1 : 0) + (idProofFrontRaw ? 1 : 0) + (idProofBackRaw ? 1 : 0);
+        var stepNum = 0;
+        function setStep(label) { stepNum++; btn.textContent = label + ' (' + stepNum + '/' + totalSteps + ')'; }
+
+        (async function () {
+          try {
+            var photoUrl = '', idFrontUrl = '', idBackUrl = '';
+
+            if (photoRaw) {
+              setStep('Compressing photo');
+              var photoCompressed = await compressImage(photoRaw, 1200, 0.7);
+              var photoObj = await blobToDataObj(photoCompressed);
+              btn.textContent = 'Uploading photo (' + stepNum + '/' + totalSteps + ')';
+              var r1 = await callBackend({ action: 'upload', yaId: yaId, kind: 'photo', fileObj: photoObj });
+              photoUrl = r1.url;
+            }
+            if (idProofFrontRaw) {
+              setStep('Compressing ID proof (front)');
+              var frontCompressed = await compressImage(idProofFrontRaw, 1600, 0.75);
+              var frontObj = await blobToDataObj(frontCompressed);
+              btn.textContent = 'Uploading ID proof front (' + stepNum + '/' + totalSteps + ')';
+              var r2 = await callBackend({ action: 'upload', yaId: yaId, kind: 'idProofFront', fileObj: frontObj });
+              idFrontUrl = r2.url;
+            }
+            if (idProofBackRaw) {
+              setStep('Compressing ID proof (back)');
+              var backCompressed = await compressImage(idProofBackRaw, 1600, 0.75);
+              var backObj = await blobToDataObj(backCompressed);
+              btn.textContent = 'Uploading ID proof back (' + stepNum + '/' + totalSteps + ')';
+              var r3 = await callBackend({ action: 'upload', yaId: yaId, kind: 'idProofBack', fileObj: backObj });
+              idBackUrl = r3.url;
+            }
+
+            setStep('Saving details');
+            await callBackend({
+              action: 'submit', yaId: yaId, fieldValues: fieldValues,
+              photoUrl: photoUrl, idProofType: idProofType,
+              idProofFrontUrl: idFrontUrl, idProofBackUrl: idBackUrl
+            });
+
+            statusEl.textContent = 'Saved. Thank you!';
+            form.style.display = 'none';
+          } catch (err) {
+            btn.disabled = false; btn.textContent = 'Submit';
+            statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
+          }
+        })();
+      });
+    })
+    .catch(function (err) {
+      document.getElementById('loading').textContent = 'Could not load: ' + err.message;
+    });
+}
+
+init();
+</script>
+</body>
+</html>
