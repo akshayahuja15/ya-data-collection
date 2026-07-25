@@ -41,7 +41,7 @@
 // CONFIGURE THIS: paste your Apps Script Web App URL below (the same one
 // used for "Save My Web App URL" in the spreadsheet's I-Card Tools menu).
 // =====================================================================
-var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrjSjXg2mEMJx8T_dpDqcESt9sdW6ph06Bmht_mqlCaw2dQlrOoXYUE_bJh8XDF-nk/exec';
+var WEBAPP_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
 
 function getYaId() {
   var params = new URLSearchParams(window.location.search);
@@ -262,40 +262,29 @@ function init() {
         var idProofBackEl = document.getElementById('idProofBackFile');
         var idProofBackRaw = idProofBackEl && idProofBackEl.files.length ? idProofBackEl.files[0] : null;
 
-        var totalSteps = 1 + (photoRaw ? 1 : 0) + (idProofFrontRaw ? 1 : 0) + (idProofBackRaw ? 1 : 0);
-        var stepNum = 0;
-        function setStep(label) { stepNum++; btn.textContent = label + ' (' + stepNum + '/' + totalSteps + ')'; }
+        var totalUploads = (photoRaw ? 1 : 0) + (idProofFrontRaw ? 1 : 0) + (idProofBackRaw ? 1 : 0);
+        var doneUploads = 0;
 
         (async function () {
           try {
-            var photoUrl = '', idFrontUrl = '', idBackUrl = '';
+            btn.textContent = totalUploads > 0 ? ('Uploading files (0/' + totalUploads + ')') : 'Saving...';
 
-            if (photoRaw) {
-              setStep('Compressing photo');
-              var photoCompressed = await compressImage(photoRaw, 1200, 0.7);
-              var photoObj = await blobToDataObj(photoCompressed);
-              btn.textContent = 'Uploading photo (' + stepNum + '/' + totalSteps + ')';
-              var r1 = await callBackend({ action: 'upload', yaId: yaId, kind: 'photo', fileObj: photoObj });
-              photoUrl = r1.url;
-            }
-            if (idProofFrontRaw) {
-              setStep('Compressing ID proof (front)');
-              var frontCompressed = await compressImage(idProofFrontRaw, 1600, 0.75);
-              var frontObj = await blobToDataObj(frontCompressed);
-              btn.textContent = 'Uploading ID proof front (' + stepNum + '/' + totalSteps + ')';
-              var r2 = await callBackend({ action: 'upload', yaId: yaId, kind: 'idProofFront', fileObj: frontObj });
-              idFrontUrl = r2.url;
-            }
-            if (idProofBackRaw) {
-              setStep('Compressing ID proof (back)');
-              var backCompressed = await compressImage(idProofBackRaw, 1600, 0.75);
-              var backObj = await blobToDataObj(backCompressed);
-              btn.textContent = 'Uploading ID proof back (' + stepNum + '/' + totalSteps + ')';
-              var r3 = await callBackend({ action: 'upload', yaId: yaId, kind: 'idProofBack', fileObj: backObj });
-              idBackUrl = r3.url;
+            function uploadOne(rawFile, maxDim, quality, kind) {
+              if (!rawFile) return Promise.resolve('');
+              return compressImage(rawFile, maxDim, quality)
+                .then(function (compressed) { return blobToDataObj(compressed); })
+                .then(function (obj) { return callBackend({ action: 'upload', yaId: yaId, kind: kind, fileObj: obj }); })
+                .then(function (r) { doneUploads++; btn.textContent = 'Uploading files (' + doneUploads + '/' + totalUploads + ')'; return r.url; });
             }
 
-            setStep('Saving details');
+            var uploadResults = await Promise.all([
+              uploadOne(photoRaw, 1200, 0.7, 'photo'),
+              uploadOne(idProofFrontRaw, 1600, 0.75, 'idProofFront'),
+              uploadOne(idProofBackRaw, 1600, 0.75, 'idProofBack')
+            ]);
+            var photoUrl = uploadResults[0], idFrontUrl = uploadResults[1], idBackUrl = uploadResults[2];
+
+            btn.textContent = 'Saving details';
             await callBackend({
               action: 'submit', yaId: yaId, fieldValues: fieldValues,
               photoUrl: photoUrl, idProofType: idProofType,
