@@ -304,6 +304,7 @@ function init() {
 
             statusEl.textContent = 'Saved. Thank you!';
             form.style.display = 'none';
+            callBackend({ action: 'highlight', yaId: yaId }).catch(function () {}); // fire-and-forget, doesn't block the confirmation above
           } catch (err) {
             btn.disabled = false; btn.textContent = 'Submit';
             statusEl.textContent = 'Error: ' + (err && err.message ? err.message : err);
