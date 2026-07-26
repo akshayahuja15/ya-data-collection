@@ -15,6 +15,7 @@
   .radio-group label{display:inline-block;font-weight:normal;margin:0 16px 6px 0;font-size:15px;}
   .radio-group input{margin-right:6px;}
   .subfield{margin-left:0;padding-left:12px;border-left:3px solid #e0d3f5;}
+  .field-context{font-size:12px;color:#666;background:#f4f4f4;padding:4px 8px;border-radius:4px;margin-top:4px;display:inline-block;}
   .guidelines{font-size:12px;color:#555;margin:6px 0 0 0;padding-left:18px;}
   button{margin-top:22px;padding:12px 18px;width:100%;background:#8e63ce;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:16px;}
   button:disabled{background:#bbb;}
@@ -67,6 +68,10 @@ function readFieldValue(input) {
 function renderFieldBlock(form, field) {
   var label = el('label', {}, [textNode(field.label)]);
   form.appendChild(label);
+  if (field.context) {
+    var contextDiv = el('div', { class: 'field-context' }, [textNode('Current on file: '), el('b', {}, [textNode(field.context)])]);
+    form.appendChild(contextDiv);
+  }
 
   if (field.type === 'date') {
     form.appendChild(el('input', { type: 'date', 'data-field': field.label }));
@@ -196,12 +201,26 @@ function blobToDataObj(blobOrFile) {
 
 // Sent as text/plain to avoid a CORS preflight OPTIONS request, which Apps
 // Script Web Apps don't handle — the server still JSON.parses the body.
+// Fetches as text first so a non-JSON response (e.g. an unexpected HTML
+// page) can be shown directly on-screen instead of just failing silently.
+function fetchJson(url, options) {
+  return fetch(url, options).then(function (r) {
+    return r.text().then(function (text) {
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error('Server did not return JSON (status ' + r.status + '). Raw response start: ' + text.slice(0, 300));
+      }
+    });
+  });
+}
+
 function callBackend(payload) {
-  return fetch(WEBAPP_URL, {
+  return fetchJson(WEBAPP_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload)
-  }).then(function (r) { return r.json(); }).then(function (r) {
+  }).then(function (r) {
     if (!r.ok) throw new Error(r.error || 'Server error');
     return r;
   });
@@ -215,8 +234,7 @@ function init() {
     return;
   }
 
-  fetch(WEBAPP_URL + '?yaid=' + encodeURIComponent(yaId) + '&format=json')
-    .then(function (r) { return r.json(); })
+  fetchJson(WEBAPP_URL + '?yaid=' + encodeURIComponent(yaId) + '&format=json')
     .then(function (info) {
       document.getElementById('loading').style.display = 'none';
       if (!info.ok) {
