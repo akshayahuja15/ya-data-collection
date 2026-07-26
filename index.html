@@ -15,7 +15,6 @@
   .radio-group label{display:inline-block;font-weight:normal;margin:0 16px 6px 0;font-size:15px;}
   .radio-group input{margin-right:6px;}
   .subfield{margin-left:0;padding-left:12px;border-left:3px solid #e0d3f5;}
-  .field-context{font-size:12px;color:#666;background:#f4f4f4;padding:4px 8px;border-radius:4px;margin-top:4px;display:inline-block;}
   .guidelines{font-size:12px;color:#555;margin:6px 0 0 0;padding-left:18px;}
   button{margin-top:22px;padding:12px 18px;width:100%;background:#8e63ce;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:16px;}
   button:disabled{background:#bbb;}
@@ -42,7 +41,7 @@
 // CONFIGURE THIS: paste your Apps Script Web App URL below (the same one
 // used for "Save My Web App URL" in the spreadsheet's I-Card Tools menu).
 // =====================================================================
-var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrjSjXg2mEMJx8T_dpDqcESt9sdW6ph06Bmht_mqlCaw2dQlrOoXYUE_bJh8XDF-nk/exec';
+var WEBAPP_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
 
 function getYaId() {
   var params = new URLSearchParams(window.location.search);
@@ -66,12 +65,12 @@ function readFieldValue(input) {
 }
 
 function renderFieldBlock(form, field) {
+  if (field.contextSourceField) {
+    form.appendChild(el('label', {}, [textNode(field.contextSourceField)]));
+    form.appendChild(el('input', { type: 'text', 'data-field': field.contextSourceField, value: field.context || '' }));
+  }
   var label = el('label', {}, [textNode(field.label)]);
   form.appendChild(label);
-  if (field.context) {
-    var contextDiv = el('div', { class: 'field-context' }, [textNode('Current on file: '), el('b', {}, [textNode(field.context)])]);
-    form.appendChild(contextDiv);
-  }
 
   if (field.type === 'date') {
     form.appendChild(el('input', { type: 'date', 'data-field': field.label }));
