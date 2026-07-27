@@ -43,9 +43,12 @@
 // =====================================================================
 var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrjSjXg2mEMJx8T_dpDqcESt9sdW6ph06Bmht_mqlCaw2dQlrOoXYUE_bJh8XDF-nk/exec';
 
-function getYaId() {
+function getUrlParam(name) {
   var params = new URLSearchParams(window.location.search);
-  return params.get('yaid') || '';
+  return params.get(name) || '';
+}
+function getYaId() {
+  return getUrlParam('yaid');
 }
 
 function el(tag, attrs, children) {
@@ -227,13 +230,19 @@ function callBackend(payload) {
 
 function init() {
   var yaId = getYaId();
+  var forcePhoto = getUrlParam('forcePhoto');
+  var forceId = getUrlParam('forceId');
   var statusEl = document.getElementById('status');
   if (!yaId) {
     document.getElementById('loading').textContent = 'Missing YA ID in the link.';
     return;
   }
 
-  fetchJson(WEBAPP_URL + '?yaid=' + encodeURIComponent(yaId) + '&format=json')
+  var lookupUrl = WEBAPP_URL + '?yaid=' + encodeURIComponent(yaId) + '&format=json';
+  if (forcePhoto) lookupUrl += '&forcePhoto=' + encodeURIComponent(forcePhoto);
+  if (forceId) lookupUrl += '&forceId=' + encodeURIComponent(forceId);
+
+  fetchJson(lookupUrl)
     .then(function (info) {
       document.getElementById('loading').style.display = 'none';
       if (!info.ok) {
