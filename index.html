@@ -20,6 +20,10 @@
   button:disabled{background:#bbb;}
   #status{margin-top:14px;font-weight:bold;text-align:center;}
   #loading{padding:40px 0;text-align:center;color:#666;}
+  .callStatusBox{background:#f3edfa;border:1px solid #d5c2f0;border-radius:8px;padding:12px 14px;margin-bottom:18px;}
+  .callStatusBox button{background:#674ea7;margin-top:10px;}
+  #callStatusMsg{margin-top:8px;font-size:13px;font-weight:bold;}
+  .nothingMissing{background:#eafaf1;border:1px solid #b7e1cd;border-radius:8px;padding:12px 14px;font-size:14px;}
 </style>
 </head>
 <body>
@@ -32,8 +36,13 @@
     <div><b>Name:</b> <span id="infoName"></span></div>
     <div><b>Sewa Center:</b> <span id="infoCenter"></span></div>
   </div>
-  <form id="collectForm"></form>
-  <div id="status"></div>
+  <div class="callStatusBox">
+    <label>Call Status</label>
+    <select id="callStatusSelect"></select>
+    <button type="button" id="callStatusBtn">Update Status</button>
+    <div id="callStatusMsg"></div>
+  </div>
+  <div id="dataFormArea"></div>
 </div>
 
 <script>
@@ -232,7 +241,6 @@ function init() {
   var yaId = getYaId();
   var forcePhoto = getUrlParam('forcePhoto');
   var forceId = getUrlParam('forceId');
-  var statusEl = document.getElementById('status');
   if (!yaId) {
     document.getElementById('loading').textContent = 'Missing YA ID in the link.';
     return;
@@ -250,18 +258,49 @@ function init() {
         document.getElementById('loading').textContent = info.error || 'Volunteer not found.';
         return;
       }
-      if (info.nothingMissing) {
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('loading').textContent = 'Nothing currently marked as missing for ' + (info.name || yaId) + '.';
-        return;
-      }
 
       document.getElementById('app').style.display = 'block';
       document.getElementById('infoYaId').textContent = yaId;
       document.getElementById('infoName').textContent = info.name;
       document.getElementById('infoCenter').textContent = info.center;
 
-      var form = document.getElementById('collectForm');
+      // Call Status can always be set, even when there's nothing else to collect.
+      var callStatusSelect = document.getElementById('callStatusSelect');
+      (info.callStatusOptions || ['']).forEach(function (opt) {
+        var option = el('option', { value: opt }, [textNode(opt || '-- Select --')]);
+        if (opt === (info.callStatus || '')) option.setAttribute('selected', 'selected');
+        callStatusSelect.appendChild(option);
+      });
+      var callStatusMsgEl = document.getElementById('callStatusMsg');
+      document.getElementById('callStatusBtn').addEventListener('click', function () {
+        var btn = this;
+        btn.disabled = true; btn.textContent = 'Saving...';
+        callBackend({ action: 'setCallStatus', yaId: yaId, status: callStatusSelect.value })
+          .then(function () {
+            btn.disabled = false; btn.textContent = 'Update Status';
+            callStatusMsgEl.textContent = 'Saved!';
+            callStatusMsgEl.style.color = '#0b8043';
+          })
+          .catch(function (err) {
+            btn.disabled = false; btn.textContent = 'Update Status';
+            callStatusMsgEl.textContent = 'Error: ' + err.message;
+            callStatusMsgEl.style.color = '#cc0000';
+          });
+      });
+
+      const dataFormArea = document.getElementById('dataFormArea');
+      if (info.nothingMissing) {
+        dataFormArea.appendChild(el('p', { class: 'nothingMissing' }, [
+          textNode('Nothing else currently marked as missing for ' + (info.name || yaId) + '.')
+        ]));
+        return;
+      }
+
+      var form = el('form', { id: 'collectForm' });
+      dataFormArea.appendChild(form);
+      var statusEl = el('div', { id: 'status' });
+      dataFormArea.appendChild(statusEl);
+
       info.fields.forEach(function (field) { renderFieldBlock(form, field); });
       if (info.needsPhoto) renderPhotoBlock(form, info.photoGuidelines);
       if (info.needsIdProof) renderIdProofBlock(form, info.idProofTypes);
