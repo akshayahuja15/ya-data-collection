@@ -277,6 +277,10 @@ function init() {
         btn.disabled = true; btn.textContent = 'Saving...';
         callBackend({ action: 'setCallStatus', yaId: yaId, status: callStatusSelect.value })
           .then(function () {
+            if (callStatusSelect.value && callStatusSelect.value !== 'Reached - in progress') {
+              document.body.innerHTML = '<div style="text-align:center;padding:60px 20px;"><h2 style="color:#674ea7;">Thank you!</h2><p>Status recorded. You can close this page.</p></div>';
+              return;
+            }
             btn.disabled = false; btn.textContent = 'Update Status';
             callStatusMsgEl.textContent = 'Saved!';
             callStatusMsgEl.style.color = '#0b8043';
