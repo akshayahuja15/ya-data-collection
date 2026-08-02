@@ -78,6 +78,11 @@ function readFieldValue(input) {
   return input.value;
 }
 
+var FIELD_NOTES = {
+  'Emergency Contact#': "Should NOT be the same as the volunteer's own Contact Number, Alt. Number, or Whatsapp#.",
+  'Communication address': 'Please mention complete Postal Address, except PIN Code. If it is same as Permanent Address, please write "Same as Permanent".'
+};
+
 function renderFieldBlock(form, field) {
   (field.contexts || []).forEach(function (c) {
     form.appendChild(el('label', {}, [textNode(c.field)]));
@@ -85,10 +90,8 @@ function renderFieldBlock(form, field) {
   });
   var label = el('label', {}, [textNode(field.label)]);
   form.appendChild(label);
-  if (field.label === 'Emergency Contact#') {
-    form.appendChild(el('div', { class: 'warningNote' }, [
-      textNode("Should NOT be the same as the volunteer's own Contact Number, Alt. Number, or Whatsapp#.")
-    ]));
+  if (FIELD_NOTES[field.label]) {
+    form.appendChild(el('div', { class: 'warningNote' }, [textNode(FIELD_NOTES[field.label])]));
   }
   var placeholderAttr = field.placeholder ? { placeholder: field.placeholder } : {};
 
